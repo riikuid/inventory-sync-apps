@@ -28,6 +28,11 @@ class AssemblyUnitItem extends Equatable {
   final bool isPrinted;
   final bool isScanned;
 
+  // 👇 NEW: Batch Grouping Data
+  final String? parentUnitId;
+  final bool isParent;
+  final int setIndex; // 0, 1, 2... untuk grouping UI
+
   const AssemblyUnitItem({
     required this.componentId,
     required this.componentName,
@@ -38,6 +43,9 @@ class AssemblyUnitItem extends Equatable {
     required this.qrValue,
     this.isPrinted = false,
     this.isScanned = false,
+    this.parentUnitId,
+    this.isParent = false,
+    this.setIndex = 0,
   });
 
   AssemblyUnitItem copyWith({bool? isPrinted, bool? isScanned}) {
@@ -51,11 +59,21 @@ class AssemblyUnitItem extends Equatable {
       qrValue: qrValue,
       isPrinted: isPrinted ?? this.isPrinted,
       isScanned: isScanned ?? this.isScanned,
+      parentUnitId: parentUnitId,
+      isParent: isParent,
+      setIndex: setIndex,
     );
   }
 
   @override
-  List<Object?> get props => [unitId, isPrinted, isScanned];
+  List<Object?> get props => [
+    unitId,
+    isPrinted,
+    isScanned,
+    parentUnitId,
+    isParent,
+    setIndex,
+  ];
 }
 
 /// 👇 UPDATED: State sekarang pakai FLAT LIST units

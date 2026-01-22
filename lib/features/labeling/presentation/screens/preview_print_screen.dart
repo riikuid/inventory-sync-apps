@@ -253,7 +253,11 @@ class _PreviewPrintScreenState extends State<PreviewPrintScreen> {
                   backgroundColor: AppColors.background,
                   appBar: AppBar(
                     iconTheme: IconThemeData(color: AppColors.onSurface),
-                    leading: CustomBackButton(),
+                    leading: CustomBackButton(
+                      onPressed: () async {
+                        await Navigator.of(context).maybePop();
+                      },
+                    ),
                     backgroundColor: AppColors.background,
                     elevation: 0.5,
                     toolbarHeight: 60,

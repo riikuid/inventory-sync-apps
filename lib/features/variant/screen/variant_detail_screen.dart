@@ -252,31 +252,8 @@ class _VariantDetailView extends StatelessWidget {
                           ),
                         );
                       } else {
-                        // open assembly flow
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => BlocProvider(
-                              create: (context) => AssemblyCubit(
-                                RepositoryProvider.of<LabelingRepository>(
-                                  context,
-                                ),
-                                d.variantId,
-                                d.name,
-                              ),
-                              child: AssemblyScreen(
-                                variantManufCode: d.manufCode ?? '',
-                                rackName: d.rackName ?? '',
-                                rackId: d.rackId ?? '',
-                                targetComponents: d.componentsInBox,
-                                variantId: d.variantId,
-                                variantName: d.name,
-                                companyCode: d.companyCode,
-                                userId: userId,
-                              ),
-                            ),
-                          ),
-                        );
+                        // open assembly flow with batch dialog
+                        _openAssemblyWithBatch(context, d, userId);
                       }
                     },
                   ); // If no in-box components => go to LabelSetScreen directly (Label Item)
@@ -307,7 +284,6 @@ class _VariantDetailView extends StatelessWidget {
               children: [
                 ListView(
                   padding: const EdgeInsets.all(16),
-
                   children: [
                     _buildDetailHeader(context, d),
                     if (!(d.componentsInBox.isEmpty &&
@@ -317,14 +293,7 @@ class _VariantDetailView extends StatelessWidget {
                         const SizedBox(height: 20),
                         _buildInBoxSection(context, d),
                       ],
-
-                      // Tampilkan Separate Section (jika tidak ada in-box)
-                      // if (d.componentsInBox.isEmpty) ...[
-                      //   const SizedBox(height: 20),
-                      //   _buildSeparateComponentSection(context, d),
-                      // ],
                     ],
-
                     const SizedBox(height: 120),
                   ],
                 ),
@@ -335,12 +304,139 @@ class _VariantDetailView extends StatelessWidget {
                   ),
               ],
             ),
-            // bottomNavigationBar: _buildBottomActions(context, d),
           );
         }
         return const SizedBox.shrink();
       },
     );
+  }
+
+  void _openAssemblyWithBatch(
+    BuildContext context,
+    VariantDetailRow d,
+    int userId,
+  ) async {
+    int qty = 1;
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) {
+        int tempQty = 1;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.white,
+              title: const Text("Cetak Batch Label"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Masukkan jumlah set yang ingin dicetak:",
+                    style: TextStyle(color: Colors.black87),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.remove_circle,
+                          color: AppColors.primary,
+                          size: 32,
+                        ),
+                        onPressed: tempQty > 1
+                            ? () => setState(() => tempQty--)
+                            : null,
+                      ),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          "$tempQty",
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.add_circle,
+                          color: AppColors.primary,
+                          size: 32,
+                        ),
+                        onPressed: () => setState(() => tempQty++),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text(
+                    "Batal",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.pop(ctx, tempQty),
+                  child: const Text("Lanjut"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null && context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BlocProvider(
+            create: (context) => AssemblyCubit(
+              RepositoryProvider.of<LabelingRepository>(context),
+              d.variantId,
+              d.name,
+            ),
+            child: AssemblyScreen(
+              variantManufCode: d.manufCode ?? '',
+              rackName: d.rackName ?? '',
+              rackId: d.rackId ?? '',
+              targetComponents: d.componentsInBox,
+              variantId: d.variantId,
+              variantName: d.name,
+              companyCode: d.companyCode,
+              userId: userId,
+              quantity: result, // Pass the quantity
+            ),
+          ),
+        ),
+      ).then((result) {
+        if (result == true && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Batch labeling selesai'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Refresh logic if needed
+          context.read<VariantDetailCubit>().watchDetail(d.variantId);
+        }
+      });
+    }
   }
 
   Widget _buildDetailHeader(BuildContext context, VariantDetailRow d) {

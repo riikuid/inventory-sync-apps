@@ -16,56 +16,83 @@ class AssemblyCubit extends Cubit<AssemblyState> {
   AssemblyCubit(this.repo, String variantId, String variantName)
     : super(AssemblyState(variantId: variantId, variantName: variantName));
 
-  /// 1. Load requirements dan AUTO-GENERATE semua units
+  /// 1. Load requirements dan AUTO-GENERATE semua units secara Batch
   Future<void> loadRequirements({
     required List<VariantComponentRow> inBoxComponents,
     required String variantRackId,
     required String variantRackName,
     required int userId,
     required String companyCode,
+    int qty = 1, // 👈 NEW: Quantity Batch
   }) async {
     emit(state.copyWith(status: AssemblyStatus.loading));
 
     try {
-      // 👇 FLAT LIST: Expand komponen jadi units individual
       List<AssemblyUnitItem> allUnits = [];
 
-      for (var component in inBoxComponents) {
-        // Generate units sesuai quantity
-        final generatedUnits = await repo.generateBatchLabels(
+      for (int i = 0; i < qty; i++) {
+        // A. Generate Parent Unit dulu (Pending)
+        final parentUnit = await repo.createParentUnitEntry(
           variantId: state.variantId,
-          companyCode: companyCode,
           rackId: variantRackId,
-          qty: component.quantity, // 🔥 Gunakan quantity dari DB!
           userId: userId,
-          componentId: component.componentId,
-          manufCode: component.manufCode ?? '-',
         );
 
-        // Convert ke AssemblyUnitItem (flat)
-        for (var unit in generatedUnits) {
-          allUnits.add(
-            AssemblyUnitItem(
-              componentId: component.componentId,
-              componentName: component.name,
-              manufCode: component.manufCode ?? '-',
-              rackName: variantRackName,
-              rackId: variantRackId,
-              unitId: unit.id,
-              qrValue: unit.qrValue,
-              isPrinted: false,
-              isScanned: false,
-            ),
+        // B. Generate Components (Linked ke Parent)
+        for (var component in inBoxComponents) {
+          final generatedUnits = await repo.generateBatchLabels(
+            variantId: state.variantId,
+            companyCode: companyCode,
+            rackId: variantRackId,
+            qty: component.quantity,
+            userId: userId,
+            componentId: component.componentId,
+            manufCode: component.manufCode ?? '-',
+            parentUnitId: parentUnit.id, // 👈 Link ke Parent
           );
+
+          // Convert Component Units
+          for (var unit in generatedUnits) {
+            allUnits.add(
+              AssemblyUnitItem(
+                componentId: component.componentId,
+                componentName: component.name,
+                manufCode: component.manufCode ?? '-',
+                rackName: variantRackName,
+                rackId: variantRackId,
+                unitId: unit.id,
+                qrValue: unit.qrValue,
+                isPrinted: false,
+                isScanned: false,
+                parentUnitId: parentUnit.id,
+                isParent: false,
+                setIndex: i,
+              ),
+            );
+          }
         }
+
+        // C. Tambahkan Parent Unit ke List (di akhir set atau awal set?)
+        // Request: QR 1 (Comp A) -> QR 2 (Comp B) -> QR 3 (Parent)
+        allUnits.add(
+          AssemblyUnitItem(
+            componentId: 'PARENT', // Dummy ID
+            componentName: state.variantName, // Link Name to Variant
+            manufCode: '-', // Variant Manuf Code? bisa diambil jika ada
+            rackName: variantRackName,
+            rackId: variantRackId,
+            unitId: parentUnit.id,
+            qrValue: parentUnit.qrValue,
+            isPrinted: false,
+            isScanned: false,
+            parentUnitId: null, // Parent doesn't have parent
+            isParent: true, // 👈 VALID Parent
+            setIndex: i,
+          ),
+        );
       }
 
-      emit(
-        state.copyWith(
-          status: AssemblyStatus.loaded,
-          units: allUnits, // 👈 Flat list!
-        ),
-      );
+      emit(state.copyWith(status: AssemblyStatus.loaded, units: allUnits));
     } catch (e) {
       emit(state.copyWith(status: AssemblyStatus.failure, error: e.toString()));
     }

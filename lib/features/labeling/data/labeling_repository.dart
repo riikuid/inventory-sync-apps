@@ -31,6 +31,7 @@ class LabelingRepository {
 
   /// CORE FUNCTION: Generate Batch Labels
   /// Menangani generate label untuk Variant (Set) maupun Component (Separate).
+  /// [parentUnitId] Opsional: Jika diisi, unit ini akan langsung ter-link ke parent tersebut.
   Future<List<Unit>> generateBatchLabels({
     required String variantId,
     required String companyCode,
@@ -40,21 +41,30 @@ class LabelingRepository {
     // Parameter Opsional untuk Component Mode
     String? componentId,
     String? manufCode,
+    String? parentUnitId, // 👈 NEW: Untuk pre-link ke parent
   }) async {
     return db.transaction(() async {
       final List<Unit> generatedUnits = [];
       final now = DateTime.now();
-
-      // final batchTimestamp = now.millisecondsSinceEpoch.toString().substring(5);
 
       for (int i = 0; i < qty; i++) {
         String unitId = generateCustomId(unitsPrefix);
 
         // Logic QR Generation
         String qrResult;
-        // Serial unik per item dalam batch ini
 
         if (componentId != null) {
+          // Jika ada parentUnitId, masukkan ke dalam QR string?
+          // Format lama: U$userId|$companyCode|$componentId|$unitId
+          // User request: QR Komponen memiliki parent unit id = parent qr id
+          // IMPLIKASI: QR string harus berubah jika kita ingin parent info ada di QR.
+          // TAPI: Request user bilang "merubah parent_unit_id unit dari komponen ... dengan id dari qr unit yg baru dicetak"
+          // Jadi yang penting di DB relasinya sudah terbentuk.
+          // QR Content tetap standard unique ID component unit, TAPI relasi di DB sudah ada.
+          // Kalo user mau di QR String ada parent ID, format QR harus ganti.
+          // Asumsi: "QR ... memiliki ... parent unit id" maksudnya STRUCTURE DATA-nya, bukan literally string QR-nya.
+          // KARENA di prompt dibilang: "QR 1 ... (memiliki variantid, komponenid, parent unit id = qr3.id)" -> ini deskripsi object/recordnya.
+
           qrResult = 'U$userId|$companyCode|$componentId|$unitId';
         } else {
           qrResult = 'U$userId|$companyCode|$variantId|$unitId';
@@ -63,12 +73,9 @@ class LabelingRepository {
         dev.log(qrResult, name: 'QR RESULT');
         final companion = UnitsCompanion.insert(
           id: unitId,
-          variantId: Value(
-            variantId,
-          ), // Variant ID tetap diisi untuk tracking grouping
-          componentId: Value(
-            componentId,
-          ), // Null jika Variant, Terisi jika Component
+          variantId: Value(variantId),
+          componentId: Value(componentId),
+          parentUnitId: Value(parentUnitId), // 👈 Insert Parent Link here!
           rackId: Value(rackId),
           qrValue: qrResult,
           status: const Value(pendingStatus),
@@ -83,14 +90,40 @@ class LabelingRepository {
           lastModifiedAt: Value(now),
         );
 
-        // Insert menggunakan DAO atau direct table insert untuk memastikan return value
-        // Kita akses table 'units' langsung dari db instance agar return Row object
         final row = await db.into(db.units).insertReturning(companion);
         generatedUnits.add(row);
       }
 
       return generatedUnits;
     });
+  }
+
+  /// NEW: Create Parent Unit Entry (Pending) without components initially
+  Future<Unit> createParentUnitEntry({
+    required String variantId,
+    required String rackId,
+    required int userId,
+  }) async {
+    final now = DateTime.now();
+    final parentId = generateCustomId(unitsPrefix);
+    final parentQr = 'SET-$parentId';
+
+    final parentEntry = UnitsCompanion.insert(
+      id: parentId,
+      variantId: Value(variantId),
+      componentId: const Value(null),
+      qrValue: parentQr,
+      status: const Value(pendingStatus),
+      rackId: Value(rackId),
+      createdBy: Value(userId.toString()),
+      updatedBy: Value(userId.toString()),
+      lastModifiedAt: Value(now),
+      needSync: const Value(true),
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    return await db.into(db.units).insertReturning(parentEntry);
   }
 
   Future<void> recordPrintedUnits({
