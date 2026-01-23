@@ -53,6 +53,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
     // Load & Auto Generate QR saat masuk
     context.read<AssemblyCubit>().loadRequirements(
       inBoxComponents: widget.targetComponents,
+      variantManufCode: widget.variantManufCode,
       variantRackId: widget.rackId,
       variantRackName: widget.rackName,
       userId: widget.userId,
@@ -149,7 +150,6 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
   Widget build(BuildContext context) {
     return BlocListener<PrinterCubit, PrinterState>(
       listener: (context, printerState) {
-        // ... (Error handling remains)
         if (printerState.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -181,24 +181,131 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
 
               return WillPopScope(
                 onWillPop: () async {
-                  // ... (Exit dialog remains)
-                  return true;
+                  final leave = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text(
+                        'Batalkan Proses Pelabelan?',
+                        style: AppTextStyles.mono.copyWith(
+                          color: AppColors.onSurface,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      content: const Text(
+                        'Unit QR sudah dibuat. Keluar sekarang akan menghapus data tersebut.',
+                        style: TextStyle(
+                          color: AppColors.onBackground,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text(
+                            'Tetap Lanjut',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                          ),
+                          child: const Text(
+                            'Hapus & Keluar',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (leave == true && mounted) {
+                    await context.read<AssemblyCubit>().cancelAssembly();
+                    if (context.mounted) {
+                      Navigator.of(context).pop(false);
+                    }
+                    return false;
+                  }
+                  return false;
                 },
                 child: Scaffold(
                   backgroundColor: AppColors.background,
                   appBar: AppBar(
                     title: Text(
-                      'Cetak Label Batch (${widget.quantity} Set)',
+                      'Cetak Label',
                       style: TextStyle(
                         color: AppColors.onSurface,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    centerTitle: true, // Center title for better look
+                    centerTitle: false,
+                    leading: CustomBackButton(
+                      onPressed: () async {
+                        await Navigator.of(context).maybePop();
+                      },
+                    ),
                   ),
+
                   body: Column(
                     children: [
                       _buildConnectionBar(context, printerState),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Status:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.onBackground,
+                              ),
+                            ),
+                            Text(
+                              "${assemblyState.units.where((u) => u.isScanned).length} / ${assemblyState.units.length} Unit Tervalidasi",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: isComplete
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 👇 UPDATED: Progress Bar
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: LinearProgressIndicator(
+                          value: assemblyState.units.isEmpty
+                              ? 0
+                              : assemblyState.units
+                                        .where((u) => u.isScanned)
+                                        .length /
+                                    assemblyState.units.length,
+                          backgroundColor: Colors.grey.shade200,
+                          color: isComplete ? Colors.green : AppColors.primary,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
                       // Progress Bar if needed
                       Expanded(
                         child: assemblyState.status == AssemblyStatus.loading
@@ -319,13 +426,28 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
     bool isComplete,
     bool hasStartedPrinting,
   ) {
-    // KONDISI 1: SUDAH SELESAI / VALIDASI OK
-    // Di Batch mode, "Selesai" bisa ditekan kapan saja jika sudah diprint/validasi
-    // Atau allow user finish anyway? let's stick to safe flow.
+    // KONDISI 1: SUDAH SELESAI (SEMUA TERVALIDASI) -> Barulah tombol SELESAI muncul
+    if (isComplete) {
+      return CustomButton(
+        color: AppColors.primary,
+        elevation: 0,
+        radius: 40,
+        height: 50,
+        width: double.infinity,
+        onPressed: _onFinishBatch, // Finish & Activate
+        child: Text(
+          "SIMPAN & SELESAI",
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+      );
+    }
 
-    // Tombol Finish
+    // KONDISI 2: SUDAH PRINT TAPI BELUM KOMPLIT -> TAMPILKAN TOMBOL VALIDASI
     if (hasStartedPrinting) {
-      // Minimal sudah print
       return Row(
         children: [
           Expanded(
@@ -337,26 +459,53 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
               onPressed: isPrinterConnected
                   ? () => _printAllUnits(isReprint: true)
                   : null,
-              child: const Text(
-                "Cetak Ulang Semua",
-                style: TextStyle(fontWeight: FontWeight.w600),
+              child: Row(
+                spacing: 5,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.local_print_shop_outlined,
+                    color: !isPrinterConnected
+                        ? AppColors.onSurface.withAlpha(100)
+                        : AppColors.onSurface,
+                  ),
+                  Text(
+                    "Cetak Ulang",
+                    style: TextStyle(
+                      color: !isPrinterConnected
+                          ? AppColors.onSurface.withAlpha(100)
+                          : AppColors.onSurface,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: CustomButton(
-              color: AppColors.primary,
+              color: AppColors.surface,
+              borderColor: AppColors.border,
               elevation: 0,
               radius: 40,
               height: 50,
-              onPressed: _onFinishBatch, // Finish & Activate
-              child: const Text(
-                "Selesai",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+              onPressed: () => _openScanner(context.read<AssemblyCubit>()),
+              child: Row(
+                spacing: 5,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.qr_code_scanner, color: AppColors.primary),
+                  Text(
+                    "Validasi",
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -364,7 +513,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
       );
     }
 
-    // KONDISI 2: PRINT All
+    // KONDISI 3: BELUM PRINT SAMA SEKALI -> TOMBOL CETAK SEMUA
     return CustomButton(
       elevation: 0,
       radius: 40,
@@ -377,11 +526,23 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         spacing: 10,
-        children: const [
-          Icon(Icons.print_outlined, size: 18),
+        children: [
+          Icon(
+            Icons.print_outlined,
+            size: 18,
+            color: isPrinterConnected
+                ? AppColors.onSurface
+                : AppColors.onSurface.withAlpha(100),
+          ),
           Text(
             'CETAK SEMUA LABEL',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+              color: isPrinterConnected
+                  ? AppColors.onSurface
+                  : AppColors.onSurface.withAlpha(100),
+            ),
           ),
         ],
       ),
@@ -467,7 +628,7 @@ class _AssemblyScreenState extends State<AssemblyScreen> {
                   ),
                   SizedBox(width: 4),
                   Text(
-                    "PARENT / LABEL BOX",
+                    "LABEL BOX",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 12,

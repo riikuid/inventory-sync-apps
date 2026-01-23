@@ -2,42 +2,45 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:inventory_sync_apps/core/db/daos/variant_dao.dart';
+import 'package:inventory_sync_apps/core/db/model/variant_component_row.dart';
 import 'package:inventory_sync_apps/core/styles/text_theme.dart';
 import 'package:inventory_sync_apps/core/utils/custom_back_button.dart';
+import 'package:inventory_sync_apps/features/labeling/data/labeling_repository.dart';
+import 'package:inventory_sync_apps/features/labeling/presentation/bloc/assembly/assembly_cubit.dart';
+import 'package:inventory_sync_apps/features/labeling/presentation/screens/assembly_screen.dart';
 
 import '../../../../core/db/model/variant_detail_row.dart';
-import '../../../../core/styles/app_style.dart';
 import '../../../../core/styles/color_scheme.dart';
 import '../../../../shared/presentation/widgets/primary_button.dart';
 import '../bloc/create_labels/create_labels_cubit.dart';
 import '../widget/label_counter_card.dart';
 import 'preview_print_screen.dart';
 
-class GenerateLabelsScreen extends StatefulWidget {
+class LabelSetupScreen extends StatefulWidget {
   final VariantDetailRow variant;
   final int userId;
 
   // Tambahan: Jika ini diisi, berarti kita sedang melabeli KOMPONEN SEPARATE
+  final List<VariantComponentRow>? components;
   final String? componentId;
   final String? componentName;
   final String? componentManuf;
 
-  const GenerateLabelsScreen({
+  const LabelSetupScreen({
     super.key,
-
     required this.variant,
     required this.userId,
+    this.components,
     this.componentId,
     this.componentName,
     this.componentManuf,
   });
 
   @override
-  State<GenerateLabelsScreen> createState() => _GenerateLabelsScreenState();
+  State<LabelSetupScreen> createState() => _LabelSetupScreenState();
 }
 
-class _GenerateLabelsScreenState extends State<GenerateLabelsScreen> {
+class _LabelSetupScreenState extends State<LabelSetupScreen> {
   int _qty = 1;
   String? _selectedRackId;
   String? _selectedRackName; // optional show
@@ -61,7 +64,7 @@ class _GenerateLabelsScreenState extends State<GenerateLabelsScreen> {
     super.dispose();
   }
 
-  void _onGenerate() async {
+  void _onGenerateSingleItem() async {
     if (_qty <= 0) {
       ScaffoldMessenger.of(
         context,
@@ -122,6 +125,49 @@ class _GenerateLabelsScreenState extends State<GenerateLabelsScreen> {
     }
   }
 
+  void _onGenerateSetItem() async {
+    if (_qty <= 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Qty harus > 0')));
+      return;
+    }
+    // if (_selectedRackId == null || _selectedRackId!.isEmpty) {
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     const SnackBar(content: Text('Pilih rak terlebih dahulu')),
+    //   );
+    //   return;
+    // }
+
+    bool? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider(
+          create: (context) => AssemblyCubit(
+            RepositoryProvider.of<LabelingRepository>(context),
+            widget.variant.variantId,
+            widget.variant.name,
+          ),
+          child: AssemblyScreen(
+            variantManufCode: widget.variant.manufCode ?? '',
+            rackName: widget.variant.rackName ?? '',
+            rackId: widget.variant.rackId ?? '',
+            targetComponents: widget.variant.componentsInBox,
+            variantId: widget.variant.variantId,
+            variantName: widget.variant.name,
+            companyCode: widget.variant.companyCode,
+            userId: widget.userId,
+            quantity: _qty,
+          ),
+        ),
+      ),
+    );
+
+    if (result == true) {
+      if (mounted) Navigator.pop(context, true);
+    }
+  }
+
   // placeholder rack picker — replace with your own picker navigation
   // Future<void> _openRackPicker() async {
   //   // TODO: open your rack picker screen, then set _selectedRackId/_selectedRackName
@@ -177,7 +223,10 @@ class _GenerateLabelsScreenState extends State<GenerateLabelsScreen> {
           radius: 40,
           height: 50,
           color: AppColors.primary,
-          onPressed: _onGenerate,
+          onPressed:
+              (widget.components != null && widget.components!.isNotEmpty)
+              ? _onGenerateSetItem
+              : _onGenerateSingleItem,
           child: Text(
             'SELANJUTNYA',
             style: TextStyle(
@@ -265,6 +314,21 @@ class _GenerateLabelsScreenState extends State<GenerateLabelsScreen> {
                       ),
                     ),
                   ],
+                  // if (widget.components != null &&
+                  //     widget.components!.isNotEmpty) ...[
+                  //   // SizedBox(height: 5),
+                  //   ...widget.components!.map((e) {
+                  //     return Container(
+                  //       margin: EdgeInsets.only(top: 5),
+                  //       decoration: BoxDecoration(
+                  //         color: AppColors.surface.withAlpha(150),
+                  //         borderRadius: BorderRadius.all(Radius.circular(12.0)),
+                  //       ),
+                  //       child: Row(children: [Text(e.name)]),
+                  //     );
+                  //   }),
+                  // ],
+
                   // if (isComponentMode)
                   //   Text(
                   //     'Bagian dari: ${widget.variant.name}',

@@ -246,7 +246,6 @@ class _PreviewPrintScreenState extends State<PreviewPrintScreen> {
                     return false;
                   }
 
-                  // Jika user batal (pilih No), return false agar tetap di halaman
                   return false;
                 },
                 child: Scaffold(

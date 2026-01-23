@@ -16,7 +16,7 @@ enum AssemblyStatus {
 
 /// 👇 BARU: Merepresentasikan 1 UNIT individual (bukan komponen!)
 class AssemblyUnitItem extends Equatable {
-  final String componentId;
+  final String? componentId;
   final String componentName;
   final String manufCode;
   final String rackName;
@@ -34,7 +34,7 @@ class AssemblyUnitItem extends Equatable {
   final int setIndex; // 0, 1, 2... untuk grouping UI
 
   const AssemblyUnitItem({
-    required this.componentId,
+    this.componentId,
     required this.componentName,
     required this.manufCode,
     required this.rackName,

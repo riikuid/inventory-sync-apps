@@ -103,7 +103,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                       _buildMainButton(
                         title: 'Terima PO',
-                        subtitle: 'Generate & cetak label untuk barang',
+                        subtitle: 'Penerimaan barang dari Purchase Order',
                         icon: Icons.content_paste_outlined,
                         onPressed: () => Navigator.push(
                           context,

@@ -21,6 +21,7 @@ class AssemblyCubit extends Cubit<AssemblyState> {
     required List<VariantComponentRow> inBoxComponents,
     required String variantRackId,
     required String variantRackName,
+    required String variantManufCode,
     required int userId,
     required String companyCode,
     int qty = 1, // 👈 NEW: Quantity Batch
@@ -33,6 +34,7 @@ class AssemblyCubit extends Cubit<AssemblyState> {
       for (int i = 0; i < qty; i++) {
         // A. Generate Parent Unit dulu (Pending)
         final parentUnit = await repo.createParentUnitEntry(
+          companyCode: companyCode,
           variantId: state.variantId,
           rackId: variantRackId,
           userId: userId,
@@ -76,9 +78,10 @@ class AssemblyCubit extends Cubit<AssemblyState> {
         // Request: QR 1 (Comp A) -> QR 2 (Comp B) -> QR 3 (Parent)
         allUnits.add(
           AssemblyUnitItem(
-            componentId: 'PARENT', // Dummy ID
+            componentId: null, // Dummy ID
             componentName: state.variantName, // Link Name to Variant
-            manufCode: '-', // Variant Manuf Code? bisa diambil jika ada
+            manufCode:
+                variantManufCode, // Variant Manuf Code? bisa diambil jika ada
             rackName: variantRackName,
             rackId: variantRackId,
             unitId: parentUnit.id,
@@ -139,78 +142,78 @@ class AssemblyCubit extends Cubit<AssemblyState> {
   }
 
   /// 4. Create Draft Set (Status PENDING)
-  Future<Unit?> createDraftSet({
-    required int userId,
-    required String companyCode,
-    required String rackId,
-    required String rackName,
-  }) async {
-    if (!state.isAllUnitsScanned) return null;
+  // Future<Unit?> createDraftSet({
+  //   required int userId,
+  //   required String companyCode,
+  //   required String rackId,
+  //   required String rackName,
+  // }) async {
+  //   if (!state.isAllUnitsScanned) return null;
 
-    emit(state.copyWith(status: AssemblyStatus.assembling));
+  //   emit(state.copyWith(status: AssemblyStatus.assembling));
 
-    try {
-      // Kumpulkan semua unit IDs
-      final componentUnitIds = state.units.map((u) => u.unitId).toList();
+  //   try {
+  //     // Kumpulkan semua unit IDs
+  //     final componentUnitIds = state.units.map((u) => u.unitId).toList();
 
-      final result = await repo.generateParentUnit(
-        variantId: state.variantId,
-        componentUnitIds: componentUnitIds,
-        userId: userId,
-        rackName: rackName,
-        rackId: rackId,
-      );
+  //     final result = await repo.generateParentUnit(
+  //       variantId: state.variantId,
+  //       componentUnitIds: componentUnitIds,
+  //       userId: userId,
+  //       rackName: rackName,
+  //       rackId: rackId,
+  //     );
 
-      final parentUnitWithRel = await repo.findUnitByQr(result.parentQrValue);
+  //     final parentUnitWithRel = await repo.findUnitByQr(result.parentQrValue);
 
-      emit(state.copyWith(status: AssemblyStatus.success));
+  //     emit(state.copyWith(status: AssemblyStatus.success));
 
-      return parentUnitWithRel?.unit;
-    } catch (e) {
-      emit(state.copyWith(status: AssemblyStatus.failure, error: e.toString()));
-      return null;
-    }
-  }
+  //     return parentUnitWithRel?.unit;
+  //   } catch (e) {
+  //     emit(state.copyWith(status: AssemblyStatus.failure, error: e.toString()));
+  //     return null;
+  //   }
+  // }
 
   /// 5. Finalisasi Set (Status ACTIVE)
-  Future<Unit?> createFinalSet({
-    required int userId,
-    required String companyCode,
-    required String rackId,
-    required String rackName,
-  }) async {
-    if (!state.isAllUnitsScanned) return null;
+  // Future<Unit?> createFinalSet({
+  //   required int userId,
+  //   required String companyCode,
+  //   required String rackId,
+  //   required String rackName,
+  // }) async {
+  //   if (!state.isAllUnitsScanned) return null;
 
-    emit(state.copyWith(status: AssemblyStatus.assembling));
+  //   emit(state.copyWith(status: AssemblyStatus.assembling));
 
-    try {
-      // Kumpulkan semua unit IDs
-      final componentUnitIds = state.units.map((u) => u.unitId).toList();
+  //   try {
+  //     // Kumpulkan semua unit IDs
+  //     final componentUnitIds = state.units.map((u) => u.unitId).toList();
 
-      final result = await repo.generateParentUnit(
-        variantId: state.variantId,
-        componentUnitIds: componentUnitIds,
-        userId: userId,
-        rackId: rackId,
-        rackName: rackName,
-      );
+  //     final result = await repo.generateParentUnit(
+  //       variantId: state.variantId,
+  //       componentUnitIds: componentUnitIds,
+  //       userId: userId,
+  //       rackId: rackId,
+  //       rackName: rackName,
+  //     );
 
-      final parentUnit = await repo.findUnitByQr(result.parentQrValue);
+  //     final parentUnit = await repo.findUnitByQr(result.parentQrValue);
 
-      emit(
-        state.copyWith(
-          status: AssemblyStatus.success,
-          parentSetQr: result.parentQrValue,
-          parentSetUnitId: result.parentUnitId,
-        ),
-      );
+  //     emit(
+  //       state.copyWith(
+  //         status: AssemblyStatus.success,
+  //         parentSetQr: result.parentQrValue,
+  //         parentSetUnitId: result.parentUnitId,
+  //       ),
+  //     );
 
-      return parentUnit?.unit;
-    } catch (e) {
-      emit(state.copyWith(status: AssemblyStatus.failure, error: e.toString()));
-      return null;
-    }
-  }
+  //     return parentUnit?.unit;
+  //   } catch (e) {
+  //     emit(state.copyWith(status: AssemblyStatus.failure, error: e.toString()));
+  //     return null;
+  //   }
+  // }
 
   Future<void> activateAllUnitComponents({required int userId}) async {
     try {

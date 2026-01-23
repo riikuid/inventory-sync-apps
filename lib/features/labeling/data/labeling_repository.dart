@@ -13,7 +13,6 @@ import '../../../core/db/daos/variant_dao.dart';
 import '../../../core/db/daos/variant_photo_dao.dart';
 import '../../../core/db/model/rack_with_warehouse_sections.dart';
 import '../../../core/db/model/variant_component_row.dart';
-import '../../sync/data/sync_repository.dart';
 import 'models/assembly_result.dart';
 import 'models/scan_unit_result.dart';
 
@@ -98,15 +97,16 @@ class LabelingRepository {
     });
   }
 
-  /// NEW: Create Parent Unit Entry (Pending) without components initially
+  /// Create Parent Unit Entry (Pending) without components initially
   Future<Unit> createParentUnitEntry({
     required String variantId,
     required String rackId,
+    required String companyCode,
     required int userId,
   }) async {
     final now = DateTime.now();
     final parentId = generateCustomId(unitsPrefix);
-    final parentQr = 'SET-$parentId';
+    final parentQr = 'U$userId|$companyCode|$variantId|$parentId';
 
     final parentEntry = UnitsCompanion.insert(
       id: parentId,
@@ -350,55 +350,6 @@ class LabelingRepository {
       variantId: v?.id,
       variantName: v?.name,
     );
-  }
-
-  // (Fitur Assembly / The Boss akan kita update setelah ini)
-  @override
-  Future<AssemblyResult> generateParentUnit({
-    required String variantId,
-    required List<String> componentUnitIds,
-    required int userId,
-    required String rackId,
-    required String rackName,
-  }) async {
-    if (componentUnitIds.length < 2) {
-      throw Exception('Minimal butuh 2 komponen untuk assembly');
-    }
-    final now = DateTime.now();
-    return _unitDao.transaction(() async {
-      final parentId = generateCustomId(unitsPrefix);
-      final parentQr = 'SET-$parentId';
-
-      final parentEntry = UnitsCompanion(
-        id: Value(parentId),
-        variantId: Value(variantId),
-        componentId: const Value(null),
-        qrValue: Value(parentQr),
-        status: const Value(pendingStatus),
-        rackId: Value(rackId),
-        createdBy: Value(userId.toString()),
-        updatedBy: Value(userId.toString()),
-        lastModifiedAt: Value(now),
-        needSync: const Value(true),
-        createdAt: Value(now),
-        updatedAt: Value(now),
-      );
-
-      final parentUnit = await _unitDao.insertParentUnit(parentEntry);
-
-      await _unitDao.bindUnitsToParent(
-        parentUnitId: parentUnit.id,
-        componentUnitIds: componentUnitIds,
-        userId: userId,
-        now: now,
-      );
-
-      return AssemblyResult(
-        parentUnitId: parentUnit.id,
-        parentQrValue: parentUnit.qrValue,
-        boundComponentUnitIds: componentUnitIds,
-      );
-    });
   }
 
   Future<void> activateAllUnitComponents({

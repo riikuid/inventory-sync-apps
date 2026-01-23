@@ -8,7 +8,7 @@ import 'package:inventory_sync_apps/core/utils/custom_back_button.dart';
 import 'package:inventory_sync_apps/core/utils/loading_overlay.dart';
 import 'package:inventory_sync_apps/features/inventory/presentation/screens/component_picker_screen.dart';
 import 'package:inventory_sync_apps/features/labeling/presentation/bloc/create_labels/create_labels_cubit.dart';
-import 'package:inventory_sync_apps/features/labeling/presentation/screens/generate_label_screen.dart';
+import 'package:inventory_sync_apps/features/labeling/presentation/screens/label_setup_screen.dart';
 import 'package:inventory_sync_apps/shared/presentation/widgets/primary_button.dart';
 import '../../../core/db/model/variant_detail_row.dart';
 import '../../../core/styles/app_style.dart';
@@ -231,33 +231,39 @@ class _VariantDetailView extends StatelessWidget {
                 height: 50,
                 color: AppColors.secondary,
                 onPressed: () {
-                  _verifyComponentCount(
-                    context,
-                    d,
-                    () {
-                      if (d.componentsInBox.where((c) => c != null).isEmpty) {
-                        // direct label (variant-level)
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => BlocProvider(
-                              create: (context) => CreateLabelsCubit(
-                                context.read<LabelingRepository>(),
-                              ),
+                  _verifyComponentCount(context, d, () {
+                    // if (d.componentsInBox.where((c) => c != null).isEmpty) {
+                    if (d.componentsInBox.isEmpty) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => BlocProvider(
+                            create: (context) => CreateLabelsCubit(
+                              context.read<LabelingRepository>(),
+                            ),
 
-                              child: GenerateLabelsScreen(
-                                variant: d,
-                                userId: userId,
-                              ),
+                            child: LabelSetupScreen(variant: d, userId: userId),
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => BlocProvider(
+                            create: (context) => CreateLabelsCubit(
+                              context.read<LabelingRepository>(),
+                            ),
+
+                            child: LabelSetupScreen(
+                              variant: d,
+                              userId: userId,
+                              components: d.componentsInBox,
                             ),
                           ),
-                        );
-                      } else {
-                        // open assembly flow with batch dialog
-                        _openAssemblyWithBatch(context, d, userId);
-                      }
-                    },
-                  ); // If no in-box components => go to LabelSetScreen directly (Label Item)
-                  // else -> navigate to assembly/merge flow
+                        ),
+                      );
+                      // _openAssemblyWithBatch(context, d, userId);
+                    }
+                  });
                 },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -420,7 +426,7 @@ class _VariantDetailView extends StatelessWidget {
               variantName: d.name,
               companyCode: d.companyCode,
               userId: userId,
-              quantity: result, // Pass the quantity
+              quantity: result,
             ),
           ),
         ),
@@ -1025,7 +1031,7 @@ class _VariantDetailView extends StatelessWidget {
                                   context.read<LabelingRepository>(),
                                 ),
 
-                                child: GenerateLabelsScreen(
+                                child: LabelSetupScreen(
                                   variant: d,
                                   userId: userId,
                                   componentId: c.componentId,
